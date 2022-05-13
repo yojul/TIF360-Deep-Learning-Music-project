@@ -1,25 +1,28 @@
-from datetime import datetime
 from miditok import get_midi_programs, midi_like, structured, remi, cp_word, octuple_mono, mumidi
 from pathlib import Path
 from miditoolkit import MidiFile
 import random
 import json
+import os
 
-class DatasetBuilder() :
-    def __init__(self,path_to_dataset, tokenizer = 'REMI', output_directory = r'.\\dataset\\' ):
-        self.paths = list(Path(path_to_dataset).glob('**/*.mid'))
-        self.output_path = output_directory
-        # Default Parameters
-        pitch_range = range(21, 109)
-        beat_res = {(0, 4): 8, (4, 12): 4}
-        nb_velocities = 32
-        additional_tokens = {'Chord': True, 'Rest': True, 'Tempo': True, 'Program': False,
+basic_remi_params = {'Chord': True, 'Rest': True, 'Tempo': True, 'Program': False,
                                  'rest_range': (2, 8),  # (half, 8 beats)
                                  'nb_tempos': 32,  # nb of tempo bins
                                  'tempo_range': (40, 250),  # (min, max)
                                  # ----------------------
                                  'TimeSignature': False,
                                  'time_signature_range': (4, 1)}
+
+class DatasetBuilder() :
+    def __init__(self,path_to_dataset, tokenizer = 'REMI', output_directory = r'.\\dataset\\' , param = basic_remi_params):
+        self.paths = list(Path(path_to_dataset).glob('**/*.mid'))
+        self.output_path = output_directory
+        self.seq_counter = 0
+        # Default Parameters
+        pitch_range = range(21, 109)
+        beat_res = {(0, 4): 8, (4, 12): 4}
+        nb_velocities = 32
+        additional_tokens = param
         token_dict = { 'REMI' : remi.REMI(pitch_range, beat_res, nb_velocities, additional_tokens),
                             'MIDILike' : midi_like.MIDILike(pitch_range, beat_res, nb_velocities, additional_tokens),
                             'CPWord' : cp_word.CPWord(pitch_range, beat_res, nb_velocities, additional_tokens),
@@ -67,6 +70,7 @@ class DatasetBuilder() :
                         tok_list[t].append(track[last_seq_idx : i-1])
                         bar_count = 0
                         last_seq_idx = i
+        self.seq_counter += len(tok_list[0])
         return(tok_list)
 
     def write_json(self,token):
@@ -94,13 +98,21 @@ class DatasetBuilder() :
 
 
 
+def merge_and_process_data(path_to_directory = r'.\\dataset\\') :
+    dataset = []
+    for dirname, _, filenames in os.walk(path_to_directory):
+        for filename in filenames:
+            print(os.path.join(dirname, filename))
+            with open(os.path.join(dirname, filename)) as f:
+                dataset.append(json.load(f))
+    processed_data = []
+    for piece in dataset:
+        if len(piece['0']) == len(piece['1']):  # Keep only pieces where both voices have the same length
+            [processed_data.append([piece['0'][i], piece['1'][i]]) for i in
+             range(len(piece['0']))]  # Add [voice 1, voice 2] for every 8 bars sequences
+    print(' %s sequences in the dataset' % len(processed_data))
+    print('The longest sequence contains %s tokens' % max([ max([len(i) for i in d]) for d in processed_data]))
 
-
-
-
-
-
-
-
+    return(processed_data)
 if __name__ == '__main__':
     pass
